@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  MIXED
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+}
+
+
+
+model User{
+  id              String                  @id @default(uuid())
+  name            String?
+  userName        String
+  email           String                  @unique
+  password        String
+  phoneNumber     String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @default(now()) @updatedAt
+  avatarUrl       String?
+  bio             String?
+  isOnline        Boolean                 @default(false)
+  lastSeen        DateTime                @default(now())
+
+  sentMessages    Message[]               @relation("UserSentMessages")
+  conversations   ConversationParticipant[] @relation("UserConversations")
+  messageReceipts MessageReceipt[]        @relation("UserMessageReceipts")
+
+  @@index([email])
+  @@index([userName])
+}
+
+model Conversation{
+  id              String                  @id @default(uuid())
+  isGroup         Boolean                 @default(false)
+  name            String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @default(now()) @updatedAt
+
+  lastMessageId   String?                 @unique
+  lastMessage     Message?                @relation("ConversationLastMessage", fields: [lastMessageId], references: [id], onDelete: SetNull)
+
+  participants    ConversationParticipant[] @relation("ConversationParticipants")
+  messages        Message[]               @relation("ConversationMessages")
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant{
+  id              String          @id @default(uuid())
+  userId          String
+  conversationId  String
+  joinedAt        DateTime        @default(now())
+
+  user            User            @relation("UserConversations", fields: [userId], references: [id], onDelete: Cascade)
+  conversation    Conversation    @relation("ConversationParticipants", fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conversationId])
+  @@index([userId])
+  @@index([conversationId])
+}
+
+model Message {
+  id                      String           @id @default(uuid())
+  conversationId          String
+  senderId                String
+  text                    String           @db.Text
+  type                    MessageType      @default(TEXT)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @default(now())
+
+  conversation            Conversation     @relation("ConversationMessages", fields: [conversationId], references: [id], onDelete: Cascade)
+  sender                  User             @relation("UserSentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  lastMessageOfConversation Conversation?  @relation("ConversationLastMessage")
+
+  attachments             MediaAttachment[]
+  receipts                MessageReceipt[]
+
+  @@index([conversationId, createdAt])
+}
+
+
+model MediaAttachment {
+  id                  String           @id @default(uuid())
+  messageId           String
+  type                MessageType
+  url                 String
+  mimeType            String?
+  fileSize            Int?
+  duration            Int?
+  createdAt           DateTime         @default(now())
+
+  message             Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
+
+model MessageReceipt{
+  id                  String           @id @default(uuid())
+  messageId           String
+  userId              String
+  status              MessageStatus    @default(SENT)
+  readAt              DateTime?
+  updatedAt           DateTime         @updatedAt
+
+  message             Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user                User             @relation("UserMessageReceipts", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, status])
+}
+
+
+
